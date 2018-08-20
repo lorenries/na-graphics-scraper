@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "heroku-postbuild": "node scrape.js"
+    "heroku-postbuild": "heroku run node scrape.js"
   },
   "engines": {
     "node": "10.6.0"
