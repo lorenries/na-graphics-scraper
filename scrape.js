@@ -43,6 +43,7 @@ async function crawl() {
   inDepthLinks.push(
     "https://www.newamerica.org/in-depth/transforming-early-education-workforce/"
   );
+  console.log(inDepthLinks);
   await page.waitForSelector(".program__publications-list > .report > a");
   const reportLinks = await page.evaluate(() => {
     const links = Array.from(
@@ -65,7 +66,7 @@ async function crawl() {
   }
   await reportLoop(reportLinks);
   console.log(results);
-  fs.writeFile("./public/results.json", JSON.stringify(results), e => {
+  fs.writeFile("results.json", JSON.stringify(results), e => {
     if (e) console.log(e);
   });
   await browser.close();
@@ -131,7 +132,7 @@ async function handleReport(link, browser) {
         slugify(reportTitle, { lower: true }, await page.url(), reportTitle)
       );
     }
-    await lookForBlocks(page, slugify(reportTitle, { lower: true }));
+    await lookForBlocks(page, reportTitle);
     await tocLoop(browser, tocLinks, reportTitle);
   } catch (e) {
     console.log(e);

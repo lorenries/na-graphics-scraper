@@ -12,11 +12,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
     const container = document.querySelector(".container");
 
-    data.forEach(section => {
-      var title = section.key;
-      var images = section.values;
+    data.forEach(dataSection => {
+      var title = dataSection.key;
+      var images = dataSection.values;
       var section = document.createElement("section");
       section.classList.add("section");
+      section.setAttribute("id", title);
       var imageContainer = document.createElement("div");
       imageContainer.classList.add("images");
       var sectionTitle = document.createElement("h1");
@@ -32,10 +33,19 @@ document.addEventListener("DOMContentLoaded", function() {
       // section.innerHTML = template;
       images.forEach(image => {
         // var link = document.createElement("a");
+        var gridItem = document.createElement("div");
+        gridItem.classList.add("images--item");
         var img = document.createElement("img");
+        var link = document.createElement("a");
+        gridItem.appendChild(img);
+        gridItem.appendChild(link);
+        link.classList.add("link");
+        link.setAttribute("href", image.url);
+        link.setAttribute("target", "_blank");
+        link.textContent = "View on newamerica.org→";
         img.classList.add("lozad");
         img.setAttribute("data-src", image.path);
-        imageContainer.appendChild(img);
+        imageContainer.appendChild(gridItem);
         const observer = lozad(img, {
           loaded: function(el) {
             Lightense(el);
