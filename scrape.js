@@ -10,7 +10,10 @@ const results = [];
 crawl();
 
 async function crawl() {
-  const browser = await puppeteer.launch({ headless: true }); // { headless: false }
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  }); // { headless: false }
   const page = await browser.newPage();
   await page.setViewport({
     width: 1200,
