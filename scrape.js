@@ -3,7 +3,7 @@ const URL = require("url");
 const path = require("path");
 const puppeteer = require("puppeteer");
 const slugify = require("slugify");
-request = require("request");
+const request = require("request");
 
 const REPORTS = "https://www.newamerica.org/reports/";
 const results = [];
@@ -11,7 +11,6 @@ crawl();
 
 async function crawl() {
   const browser = await puppeteer.launch({
-    headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   }); // { headless: false }
   const page = await browser.newPage();
