@@ -1,14 +1,16 @@
-const fetch = require("node-fetch");
 const fs = require("fs");
 const URL = require("url");
 const path = require("path");
 const puppeteer = require("puppeteer");
+const slugify = require("slugify");
+request = require("request");
 
 const REPORTS = "https://www.newamerica.org/reports/";
+const results = [];
+crawl();
 
-(async () => {
-  const links = { indepth: [], reports: [] };
-  const browser = await puppeteer.launch({ headless: false }); // { headless: false }
+async function crawl() {
+  const browser = await puppeteer.launch({ headless: true }); // { headless: false }
   const page = await browser.newPage();
   await page.setViewport({
     width: 1200,
@@ -17,7 +19,7 @@ const REPORTS = "https://www.newamerica.org/reports/";
   await page.goto(REPORTS, {
     waitUntil: "networkidle2"
   });
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 30; i++) {
     await page.waitFor(1000);
     let readMore = await page.$(".program__publications-list-load-more a");
     await readMore.click();
@@ -33,6 +35,12 @@ const REPORTS = "https://www.newamerica.org/reports/";
     );
     return links.map(link => link.href);
   });
+  inDepthLinks.push(
+    "https://www.newamerica.org/in-depth/mapping-financial-opportunity/"
+  );
+  inDepthLinks.push(
+    "https://www.newamerica.org/in-depth/transforming-early-education-workforce/"
+  );
   await page.waitForSelector(".program__publications-list > .report > a");
   const reportLinks = await page.evaluate(() => {
     const links = Array.from(
@@ -40,73 +48,195 @@ const REPORTS = "https://www.newamerica.org/reports/";
     );
     return links.map(link => link.href);
   });
-  // console.log(inDepthLinks);
-  // console.log(reportLinks);
-  for (link of inDepthLinks) {
-    await handleInDepth(link, browser);
+  async function inDepthLoop(inDepthLinks) {
+    for (link of inDepthLinks) {
+      await handleInDepth(link, browser);
+      console.log(link);
+    }
   }
-  // for (link of reportLinks) {
-  //   await handleReport(link, browser);
-  // }
+  await inDepthLoop(inDepthLinks);
+  async function reportLoop(reportLinks) {
+    for (link of reportLinks) {
+      await handleReport(link, browser);
+      console.log(link);
+    }
+  }
+  await reportLoop(reportLinks);
+  console.log(results);
+  fs.writeFile("./results.json", JSON.stringify(results), e => {
+    if (e) console.log(e);
+  });
   await browser.close();
-})();
+}
 
 async function handleInDepth(link, browser) {
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1200, height: 1200 });
+    await page.setViewport({ width: 2000, height: 10000 });
     await page.goto(link, { waitUntil: "networkidle2" });
-    await lookForBlocks(page);
+    const reportTitle = await page.evaluate(() => {
+      return document.querySelector("h1").innerText;
+    });
+    const tocLinks = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll(".contents-panel a"));
+      return links.map(link => link.href);
+    });
+    await lookForBlocks(page, slugify(reportTitle, { lower: true }));
+    await tocLoop(browser, tocLinks, reportTitle);
   } catch (e) {
     console.log(e);
   }
 }
 
 async function handleReport(link, browser) {
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1200, height: 1200 });
-  await page.goto(link, { waitUntil: "networkidle2" });
-}
-
-async function lookForBlocks(page) {
-  const blocks = await page.$$(".block-dataviz");
-  const urlPath = URL.parse(await page.url()).pathname;
-  const dir = path.basename(urlPath);
-
-  if (blocks.length > 0) {
-    await captureScreenshots(page, blocks, dir);
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 2000, height: 10000 });
+    await page.goto(link, { waitUntil: "networkidle2" });
+    await page.waitFor("h1");
+    const reportTitle = await page.evaluate(() => {
+      return document.querySelector("h1").innerText;
+    });
+    const tocLinks = await page.evaluate(() => {
+      const links = Array.from(
+        document.querySelectorAll(
+          ".report__content-menu a.report__content-menu__section"
+        )
+      );
+      return links.map(link => link.href);
+    });
+    const images = await page.evaluate(() => {
+      const graphics = [];
+      const img = document.querySelectorAll("img");
+      img.forEach(el => {
+        if (
+          el.src.includes("fig") ||
+          el.src.includes("graphic") ||
+          el.src.includes("map") ||
+          el.src.includes("Fig") ||
+          el.src.includes("Graphic") ||
+          el.src.includes("Map")
+        ) {
+          graphics.push(el.src);
+        }
+      });
+      return graphics;
+    });
+    console.log(images);
+    if (images.length > 0) {
+      await downloadStaticImages(
+        images,
+        slugify(reportTitle, { lower: true }, await page.url(), reportTitle)
+      );
+    }
+    await lookForBlocks(page, slugify(reportTitle, { lower: true }));
+    await tocLoop(browser, tocLinks, reportTitle);
+  } catch (e) {
+    console.log(e);
   }
 }
 
-async function captureScreenshots(page, nodeList, dir) {
-  await fs.access("./screenshots/" + dir, function(err) {
+async function tocLoop(browser, tocLinks, reportTitle) {
+  console.log(tocLinks);
+  for (link of tocLinks) {
+    console.log(link);
+    const page = await browser.newPage();
+    await page.setViewport({ width: 2000, height: 10000 });
+    await page.goto(link, { waitUntil: "networkidle0" });
+    // page.waitFor(1000);
+    await lookForBlocks(page, reportTitle);
+  }
+}
+
+async function downloadStaticImages(images, dir, pageUrl, pageTitle) {
+  await fs.access("./public/screenshots/" + dir, function(err) {
     if (err && err.code === "ENOENT") {
-      fs.mkdir("./screenshots/" + dir, err => console.log(err));
+      fs.mkdir("./public/screenshots/" + dir, err => console.log(err));
     }
   });
+  async function download(url, fileName, callback) {
+    request.head(url, function(err, res, body) {
+      request(url)
+        .pipe(
+          fs.createWriteStream("./public/screenshots/" + dir + "/" + fileName)
+        )
+        .on("close", callback);
+    });
+  }
+  for (let i = 0; i < images.length; i++) {
+    const fileName = path.parse(images[i]).base;
+    await download(images[i], fileName, function() {
+      results.push({
+        path: `./public/screenshots/${dir}/${fileName}`,
+        url: pageUrl,
+        title: pageTitle
+      });
+    });
+  }
+}
+
+async function lookForBlocks(page, reportTitle) {
+  // try {
+  //   await page.waitForSelector(".block-dataviz", { timeout: 1000 });
+  // } catch (e) {
+  //   console.log(e);
+  // }
+  const blocks = await page.$$(".block-dataviz");
+  await page.evaluate(() => {
+    const cookieNotification = document.querySelector(".cookies-notification");
+    if (cookieNotification) {
+      cookieNotification.style.display = "none";
+    }
+  });
+  // console.log(blocks);
+  const urlPath = URL.parse(await page.url()).pathname;
+  // const dir = path.basename(urlPath);
+  const dir = slugify(reportTitle, { lower: true });
+  console.log(dir);
+  if (blocks.length > 0) {
+    console.log("found ur block");
+    await captureScreenshots(page, blocks, dir, reportTitle);
+  }
+  await page.close();
+}
+
+async function captureScreenshots(page, nodeList, dir, pageTitle) {
+  await fs.access("./public/screenshots/" + dir, function(err) {
+    if (err && err.code === "ENOENT") {
+      fs.mkdir("./public/screenshots/" + dir, err => console.log(err));
+    }
+  });
+  // async function loopThroughBlocks() {
   for (var i = 0; i < nodeList.length; i++) {
     try {
+      const fileName = Date.now();
+      await screenshotDOMElement({
+        path: `./public/screenshots/${dir}/${fileName}.png`,
+        el: nodeList[i],
+        padding: 16,
+        page: page
+      });
       // await nodeList[i].screenshot({
-      //   path: `./screenshots/${dir}/${subDir}/${i}.png`
+      //   path: `./screenshots/${dir}/${Date.now()}.png`
       // });
-      // await screenshotDOMElement({
-      //   path: `./screenshots/${dir}/${i}.png`,
-      //   el: nodeList[i],
-      //   padding: 16,
-      //   page: page
-      // });
-      await nodeList[i].screenshot({ path: `./screenshots/${dir}/${i}.png` });
+      results.push({
+        path: `./public/screenshots/${dir}/${fileName}.png`,
+        url: page.url(),
+        title: pageTitle
+      });
     } catch (e) {
       console.log(e);
     }
+    // }
   }
+  // await loopThroughBlocks();
 }
 
 async function screenshotDOMElement(opts = {}) {
+  const page = opts.page;
   const padding = "padding" in opts ? opts.padding : 0;
   const path = "path" in opts ? opts.path : null;
   const element = opts.el;
-  const page = opts.page;
 
   const rect = await page.evaluate(element => {
     // const element = document.querySelector(selector);
